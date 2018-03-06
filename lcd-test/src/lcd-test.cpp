@@ -20,6 +20,7 @@
 
 // TODO: insert other include files here
 #include "DigitalIoPin.h"
+#include "Button.h"
 #include "LiquidCrystal.h"
 #include "BarGraph.h"
 
@@ -112,24 +113,27 @@ int main(void) {
 	DigitalIoPin sw0(0, 29, true, true, true);
 	DigitalIoPin sw1(0, 9, true, true, true);
 	DigitalIoPin sw2(0, 10, true, true, true);
+	Button b0(&sw0);
+	Button b1(&sw1);
+	Button b2(&sw2);
 
 	uint32_t val0 = 500;
 	char str2[80];
 
 	while(1) {
 
-		if (sw0.read())
+		if (b0.getRepeat(ticks, 10))
 		{
 			// decrement
 			if (val0 > 0)
 				--val0;
 		}
-		if (sw1.read())
+		if (b1.getDown())
 		{
 			// reset
 			val0 = 500;
 		}
-		if (sw2.read())
+		if (b2.getRepeat(ticks, 10))
 		{
 			// increment
 			if (val0 < 1000)
@@ -142,7 +146,7 @@ int main(void) {
 //		lcd.setCursor(10, 0);
 		bar.draw(val0 * 50 / 1000);
 
-		Sleep(10);
+		//Sleep(10);
 	}
 
     return 0 ;
