@@ -111,7 +111,7 @@ int main(void) {
     const int MANUAL = true;
     const int AUTO = false;
     int mode = MANUAL;
-    const int EPSILON = 1;
+    const float EPSILON = 0.2;
 	while(1) {
 		if(b0.getDown())
 		{
@@ -159,10 +159,10 @@ int main(void) {
 				sensor.getPressureDiff(pressure);
 				//int16_t diff = targetPressure - pressure;
 				if (targetPressure > pressure + EPSILON) {
-					targetPressure - pressure > 10 ? freq += 1000 : freq += 100;
+					targetPressure - pressure > 10 ? freq += 1000 : freq += 50;
 
 				} else if (pressure > targetPressure + EPSILON) {
-					pressure - targetPressure > 10 ? freq -= 1000 : freq -= 100;
+					pressure - targetPressure > 10 ? freq -= 1000 : freq -= 50;
 				}
 //				int16_t diff = targetPressure - pressure;
 ////				if (diff > -EPSILON || diff < EPSILON)
