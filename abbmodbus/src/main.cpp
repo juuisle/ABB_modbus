@@ -81,7 +81,7 @@ int main(void) {
 	SysTick_Config(SystemCoreClock / 1000);
 
 	/* GPIO PIN SETTING */
-	DigitalIoPin sw0(0, 29, true, true, true);
+	DigitalIoPin sw0(1, 3, true, true, true);
 	DigitalIoPin sw1(0, 9, true, true, true);
 	DigitalIoPin sw2(0, 10, true, true, true);
 	Button b0(&sw0);
@@ -106,24 +106,89 @@ int main(void) {
 	Fan fan;
 	uint16_t freq = 2000;
 	int16_t pressure;
+	int16_t targetPressure = 0;
     char buffer[64];
-
+    const int MANUAL = true;
+    const int AUTO = false;
+    int mode = MANUAL;
+    const int EPSILON = 1;
 	while(1) {
-		if (freq < 20000 && b2.getRepeat(systicks, 10)) {
-			freq += 100;
-		}
-		if (freq > 0 && b1.getRepeat(systicks, 10)) {
-			freq -= 100;
+		if(b0.getDown())
+		{
+			mode = !mode;
 		}
 
-		fan.setFrequency(freq);
+		switch(mode)
+		{
+		case MANUAL:
+			if (freq < 20000 && b2.getRepeat(systicks, 10)) {
+				freq += 100;
+			}
+			if (freq > 0 && b1.getRepeat(systicks, 10)) {
+				freq -= 100;
+			}
 
-		sensor.getPressureDiff(pressure);
-		fan.getFrequency(freq);
+			fan.setFrequency(freq);
 
-		sprintf(buffer, "Pressure: %dPa \nFreq: %d%%   \n", pressure, freq/200);
-		lcd.print(buffer);
-		printf(buffer);
+			sensor.getPressureDiff(pressure);
+			fan.getFrequency(freq);
+
+			sprintf(buffer, "Pressure: %3dPa \nFreq: %3d%%  \n", pressure, freq/200);
+			lcd.print(buffer);
+			lcd.setCursor(15, 1);
+			lcd.write('M');
+
+			printf(buffer);
+
+			break;
+		case AUTO:
+
+			if (targetPressure < 120 && b2.getRepeat(systicks, 100)) {
+				targetPressure += 1;
+
+			}
+
+			if (targetPressure > 0 && b1.getRepeat(systicks, 100)) {
+				targetPressure -= 1;
+			}
+
+			if(b2.get() || b1.get()) {
+				sprintf(buffer, "Set: %3dPa   ", targetPressure);
+				lcd.print(buffer);
+			} else {
+				sensor.getPressureDiff(pressure);
+				//int16_t diff = targetPressure - pressure;
+				if (targetPressure > pressure + EPSILON) {
+					targetPressure - pressure > 10 ? freq += 1000 : freq += 100;
+
+				} else if (pressure > targetPressure + EPSILON) {
+					pressure - targetPressure > 10 ? freq -= 1000 : freq -= 100;
+				}
+//				int16_t diff = targetPressure - pressure;
+////				if (diff > -EPSILON || diff < EPSILON)
+//				freq += diff * 100;
+
+				if(freq > 20000) freq = 20000;
+
+
+
+				fan.setFrequency(freq);
+				fan.getFrequency(freq);
+                Sleep(1000);
+				sprintf(buffer,
+						"Pressure: %3dPa \nFreq: %3d%%  \n", pressure, freq / 200);
+
+				lcd.print(buffer);
+				printf(buffer);
+			}
+
+
+
+			lcd.setCursor(15, 1);
+			lcd.write('A');
+			break;
+		}
+
 	}
 
     // Force the counter to be placed into memory
