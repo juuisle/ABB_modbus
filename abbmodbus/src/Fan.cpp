@@ -2,19 +2,16 @@
 
 void Sleep(int ms);
 
-Fan::Fan() {
-	node = ModbusMaster(2);
+Fan::Fan() : node(2) {
 	node.begin(9600); // set transmission rate - other parameters are set inside the object and can't be changed here
 	node.writeSingleRegister(0, 0x0406); // prepare for starting
 	node.writeSingleRegister(0, 0x047F); // set drive to start mode
-
 }
 
 bool Fan::setFrequency(uint16_t freq) {
 	uint8_t result;
 	int ctr;
 	bool atSetpoint;
-	const int delay = 500;
 
 	node.writeSingleRegister(1, freq); // set motor frequency
 
@@ -22,7 +19,6 @@ bool Fan::setFrequency(uint16_t freq) {
 	ctr = 0;
 	atSetpoint = false;
 	do {
-		Sleep(delay);
 		// read status word
 		result = node.readHoldingRegisters(3, 1);
 		// check if we are at setpoint
@@ -48,6 +44,7 @@ bool Fan::getFrequency(uint16_t &out) {
 	// note: sometimes we don't succeed on first read so we try up to threee times
 	// if read is successful print frequency and current (scaled values)
 	if (result == node.ku8MBSuccess) {
+
 		out = node.getResponseBuffer(0);
 		return 1;
 	} else {

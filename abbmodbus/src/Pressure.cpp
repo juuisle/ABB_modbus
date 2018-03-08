@@ -9,7 +9,8 @@ bool Pressure::getPressureDiff(int16_t &out) {
 	uint8_t readPressureCmd = 0xF1;
 
 	if (i2c.transaction(0x40, &readPressureCmd, 1, pressureData, 3)) {
-		out = ((pressureData[0] << 8) | pressureData[1]) / 240;
+		out = ((pressureData[0] << 8) | pressureData[1]);
+		out = out / 240;
 		return 1;
 	}
 	else {

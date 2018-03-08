@@ -24,6 +24,9 @@
 
 #include "Pressure.h"
 #include "Fan.h"
+#include "DigitalIoPin.h"
+#include "LiquidCrystal.h"
+#include "Button.h"
 
 static volatile int counter;
 static volatile uint32_t systicks;
@@ -77,19 +80,50 @@ int main(void) {
 	/* Enable and setup SysTick Timer at a periodic rate */
 	SysTick_Config(SystemCoreClock / 1000);
 
-	Board_LED_Set(0, false);
-	Board_LED_Set(1, true);
-	printf("Started\n");
+	/* GPIO PIN SETTING */
+	DigitalIoPin sw0(0, 29, true, true, true);
+	DigitalIoPin sw1(0, 9, true, true, true);
+	DigitalIoPin sw2(0, 10, true, true, true);
+	Button b0(&sw0);
+	Button b1(&sw1);
+	Button b2(&sw2);
 
-	Pressure pressure;
+	/* LCD */
+	Chip_RIT_Init(LPC_RITIMER); // initialize RIT (enable clocking etc.)
+
+	DigitalIoPin a0(0, 8, false, false, false);
+	DigitalIoPin a1(1, 6, false, false, false);
+	DigitalIoPin a2(1, 8, false, false, false);
+	DigitalIoPin a3(0, 5, false, false, false);
+	DigitalIoPin a4(0, 6, false, false, false);
+	DigitalIoPin a5(0, 7, false, false, false);
+
+	LiquidCrystal lcd(&a0, &a1, &a2, &a3, &a4, &a5);
+	// configure display geometry
+	lcd.begin(16, 2);
+
+	Pressure sensor;
 	Fan fan;
-	uint16_t freq;
-	fan.setFrequency(5000);
+	uint16_t freq = 2000;
+	int16_t pressure;
+    char buffer[64];
 
 	while(1) {
+		if (freq < 20000 && b2.getRepeat(systicks, 10)) {
+			freq += 100;
+		}
+		if (freq > 0 && b1.getRepeat(systicks, 10)) {
+			freq -= 100;
+		}
 
+		fan.setFrequency(freq);
+
+		sensor.getPressureDiff(pressure);
 		fan.getFrequency(freq);
-		printf("%d\n", freq);
+
+		sprintf(buffer, "Pressure: %dPa \nFreq: %d%%   \n", pressure, freq/200);
+		lcd.print(buffer);
+		printf(buffer);
 	}
 
     // Force the counter to be placed into memory
