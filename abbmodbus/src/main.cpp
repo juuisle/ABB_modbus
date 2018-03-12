@@ -60,6 +60,16 @@ uint32_t millis() {
 	return systicks;
 }
 
+template<typename T>
+inline T clamp(T a, const T &min, const T &max)
+{
+	if (a < min)
+		a = min;
+	if (a > max)
+		a = max;
+	return a;
+}
+
 int main(void) {
 
 #if defined (__USE_LPCOPEN)
@@ -102,17 +112,28 @@ int main(void) {
 	// configure display geometry
 	lcd.begin(16, 2);
 
-	Pressure sensor;
+	const int MAX_FREQ = 20000;
+	const int MAX_PRESSURE = 120;
+    const int MANUAL = true;
+    const int AUTO = false;
+    const float EPSILON = 1;
+
 	Fan fan;
-	uint16_t freq = 2000;
+	Pressure sensor;
+
+	uint16_t freq = 0;
 	int16_t pressure;
 	int16_t targetPressure = 0;
     char buffer[64];
-    const int MANUAL = true;
-    const int AUTO = false;
     int mode = MANUAL;
-    const float EPSILON = 0.2;
+    uint32_t lastTick = 0;
+    uint32_t lastInputTick = 0;
+    int16_t diff = 0;
+    int newFreq;
+
 	while(1) {
+		uint32_t tick = systicks;
+
 		if(b0.getDown())
 		{
 			mode = !mode;
@@ -121,71 +142,109 @@ int main(void) {
 		switch(mode)
 		{
 		case MANUAL:
-			if (freq < 20000 && b2.getRepeat(systicks, 10)) {
-				freq += 100;
-			}
-			if (freq > 0 && b1.getRepeat(systicks, 10)) {
-				freq -= 100;
-			}
 
-			fan.setFrequency(freq);
+			newFreq = freq;
+			if (b2.getRepeat(tick, 10))
+				newFreq += (MAX_FREQ/100);
+			if (b1.getRepeat(tick, 10))
+				newFreq -= (MAX_FREQ/100);
+			freq = (uint16_t)clamp(newFreq, 0, MAX_FREQ);
+
+			if (!fan.setFrequency(freq))
+			{
+				printf("failed to set frequency: %d", freq);
+			}
 
 			sensor.getPressureDiff(pressure);
 			fan.getFrequency(freq);
 
-			sprintf(buffer, "Pressure: %3dPa \nFreq: %3d%%  \n", pressure, freq/200);
+			sprintf(buffer,
+					"Speed:    %3d%% M\nPressure: %3dPa \n", freq/(MAX_FREQ/100), pressure);
+
 			lcd.print(buffer);
-			lcd.setCursor(15, 1);
-			lcd.write('M');
+//			lcd.setCursor(15, 0);
+//			lcd.write('M');
 
-			printf(buffer);
-
+			printf("Manual: Frequency=%d, Pressure=%d\n", freq, pressure);
 			break;
+
 		case AUTO:
 
-			if (targetPressure < 120 && b2.getRepeat(systicks, 100)) {
-				targetPressure += 1;
-
-			}
-
-			if (targetPressure > 0 && b1.getRepeat(systicks, 100)) {
-				targetPressure -= 1;
-			}
-
-			if(b2.get() || b1.get()) {
-				sprintf(buffer, "Set: %3dPa   ", targetPressure);
-				lcd.print(buffer);
-			} else {
-				sensor.getPressureDiff(pressure);
-				//int16_t diff = targetPressure - pressure;
-				if (targetPressure > pressure + EPSILON) {
-					targetPressure - pressure > 10 ? freq += 1000 : freq += 50;
-
-				} else if (pressure > targetPressure + EPSILON) {
-					pressure - targetPressure > 10 ? freq -= 1000 : freq -= 50;
+			if(b2.get() || b1.get()) // set target pressure
+			{
+				if (targetPressure < MAX_PRESSURE && b2.getRepeat(tick, 100)) {
+					++targetPressure;
 				}
-//				int16_t diff = targetPressure - pressure;
-////				if (diff > -EPSILON || diff < EPSILON)
-//				freq += diff * 100;
 
-				if(freq > 20000) freq = 20000;
+				if (targetPressure > 0 && b1.getRepeat(tick, 100)) {
+					--targetPressure;
+				}
 
+				sprintf(buffer, "Set: %3dPa     A\n                ", targetPressure);
 
-
-				fan.setFrequency(freq);
-				fan.getFrequency(freq);
-                Sleep(1000);
-				sprintf(buffer,
-						"Pressure: %3dPa \nFreq: %3d%%  \n", pressure, freq / 200);
-
-				lcd.print(buffer);
-				printf(buffer);
+				lastInputTick = tick;
 			}
 
+			//else // adjust frequency iteratively to reach target pressure
+			{
+				fan.getFrequency(freq);
+				sensor.getPressureDiff(pressure);
+
+				// Option 1
+//				if (tick >= lastTick + 1000) // give time for pressure reading to update
+//				{
+//					if (targetPressure > pressure + EPSILON) {
+//						targetPressure - pressure > 10 ? freq += 1000 : freq += 50;
+//					}
+//					else if (pressure > targetPressure + EPSILON) {
+//						pressure - targetPressure > 10 ? freq -= 1000 : freq -= 50;
+//					}
+//					// Clamp
+//					if(freq > MAX_FREQ) freq = MAX_FREQ;
+//
+//					lastTick = tick;
+//				}
+
+				// Option 2
+				if (tick >= lastTick + abs(diff) * 80) // give time for pressure reading to update
+				{
+					diff = targetPressure - pressure;
+					if (diff > -EPSILON || diff < EPSILON)
+					{
+						newFreq = freq + diff * 40;
+						freq = (uint16_t)clamp(newFreq, 0, MAX_FREQ);
+					}
+
+					lastTick = tick;
+
+					// NOTE: each time frequency is set to a value smaller than 4000,
+					// the fan will do a burst and it will take about 3 to 5 seconds to reach the correct speed
+					if (freq < 4000)
+					{
+						diff = 60;
+						if (targetPressure < EPSILON)
+							freq = 0;
+						else if (freq < 1200)
+							freq = 1200; // below this the fan will not run
+					}
+				}
 
 
-			lcd.setCursor(15, 1);
-			lcd.write('A');
+				if (!fan.setFrequency(freq))
+				{
+					printf("failed to set frequency: %d", freq);
+				}
+
+				if (tick > lastInputTick + 1000) // timeout the set screen
+					sprintf(buffer,
+							"Speed:    %3d%% A\nPressure: %3dPa \n", freq/(MAX_FREQ/100), pressure);
+			}
+
+			lcd.print(buffer);
+//			lcd.setCursor(15, 0);
+//			lcd.write('A');
+
+			printf("Auto: Frequency=%d, Pressure=%d\n", freq, pressure);
 			break;
 		}
 
