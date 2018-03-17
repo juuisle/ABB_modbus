@@ -1,7 +1,6 @@
 #include "Pressure.h"
 
 Pressure::Pressure() : i2c(0, 10000) {
-//	i2c = I2C(0, 100000);
 }
 
 bool Pressure::getPressureDiff(int16_t &out) {
@@ -17,5 +16,3 @@ bool Pressure::getPressureDiff(int16_t &out) {
 		return 0;
 	}
 }
-
-

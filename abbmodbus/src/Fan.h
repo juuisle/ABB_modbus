@@ -11,6 +11,5 @@ public:
 	bool getFrequency(uint16_t &out);
 private:
 	ModbusMaster node;
-
 };
 #endif

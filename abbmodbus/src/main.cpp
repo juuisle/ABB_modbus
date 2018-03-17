@@ -90,7 +90,7 @@ int main(void) {
 	/* Enable and setup SysTick Timer at a periodic rate */
 	SysTick_Config(SystemCoreClock / 1000);
 
-	/* GPIO PIN SETTING */
+	/* Buttons */
 	DigitalIoPin sw0(1, 3, true, true, true);
 	DigitalIoPin sw1(0, 9, true, true, true);
 	DigitalIoPin sw2(0, 10, true, true, true);
@@ -114,9 +114,9 @@ int main(void) {
 
 	const int MAX_FREQ = 20000;
 	const int MAX_PRESSURE = 120;
+    const int EPSILON = 1;
     const int MANUAL = true;
     const int AUTO = false;
-    const float EPSILON = 1;
 
 	Fan fan;
 	Pressure sensor;
@@ -144,10 +144,10 @@ int main(void) {
 		case MANUAL:
 
 			newFreq = freq;
-			if (b2.getRepeat(tick, 10))
-				newFreq += (MAX_FREQ/100);
 			if (b1.getRepeat(tick, 10))
 				newFreq -= (MAX_FREQ/100);
+			if (b2.getRepeat(tick, 10))
+				newFreq += (MAX_FREQ/100);
 			freq = (uint16_t)clamp(newFreq, 0, MAX_FREQ);
 
 			if (!fan.setFrequency(freq))
@@ -162,22 +162,19 @@ int main(void) {
 					"Speed:    %3d%% M\nPressure: %3dPa \n", freq/(MAX_FREQ/100), pressure);
 
 			lcd.print(buffer);
-//			lcd.setCursor(15, 0);
-//			lcd.write('M');
 
 			printf("Manual: Frequency=%d, Pressure=%d\n", freq, pressure);
 			break;
 
 		case AUTO:
 
-			if(b2.get() || b1.get()) // set target pressure
+			if(b1.get() || b2.get()) // set target pressure
 			{
-				if (targetPressure < MAX_PRESSURE && b2.getRepeat(tick, 100)) {
-					++targetPressure;
-				}
-
 				if (targetPressure > 0 && b1.getRepeat(tick, 100)) {
 					--targetPressure;
+				}
+				if (targetPressure < MAX_PRESSURE && b2.getRepeat(tick, 100)) {
+					++targetPressure;
 				}
 
 				sprintf(buffer, "Set: %3dPa     A\n                ", targetPressure);
@@ -185,43 +182,27 @@ int main(void) {
 				lastInputTick = tick;
 			}
 
-			//else // adjust frequency iteratively to reach target pressure
+			// adjust frequency iteratively to reach target pressure
 			{
 				fan.getFrequency(freq);
 				sensor.getPressureDiff(pressure);
 
-				// Option 1
-//				if (tick >= lastTick + 1000) // give time for pressure reading to update
-//				{
-//					if (targetPressure > pressure + EPSILON) {
-//						targetPressure - pressure > 10 ? freq += 1000 : freq += 50;
-//					}
-//					else if (pressure > targetPressure + EPSILON) {
-//						pressure - targetPressure > 10 ? freq -= 1000 : freq -= 50;
-//					}
-//					// Clamp
-//					if(freq > MAX_FREQ) freq = MAX_FREQ;
-//
-//					lastTick = tick;
-//				}
-
-				// Option 2
 				if (tick >= lastTick + abs(diff) * 80) // give time for pressure reading to update
 				{
+					lastTick = tick;
+
 					diff = targetPressure - pressure;
-					if (diff > -EPSILON || diff < EPSILON)
+					if (diff < -EPSILON || diff > EPSILON)
 					{
 						newFreq = freq + diff * 40;
 						freq = (uint16_t)clamp(newFreq, 0, MAX_FREQ);
 					}
 
-					lastTick = tick;
-
 					// NOTE: each time frequency is set to a value smaller than 4000,
 					// the fan will do a burst and it will take about 3 to 5 seconds to reach the correct speed
 					if (freq < 4000)
 					{
-						diff = 60;
+						diff = 60; // this will make the wait longer
 						if (targetPressure < EPSILON)
 							freq = 0;
 						else if (freq < 1200)
@@ -229,20 +210,19 @@ int main(void) {
 					}
 				}
 
-
 				if (!fan.setFrequency(freq))
 				{
 					printf("failed to set frequency: %d", freq);
 				}
 
 				if (tick > lastInputTick + 1000) // timeout the set screen
+				{
 					sprintf(buffer,
 							"Speed:    %3d%% A\nPressure: %3dPa \n", freq/(MAX_FREQ/100), pressure);
+				}
 			}
 
 			lcd.print(buffer);
-//			lcd.setCursor(15, 0);
-//			lcd.write('A');
 
 			printf("Auto: Frequency=%d, Pressure=%d\n", freq, pressure);
 			break;
